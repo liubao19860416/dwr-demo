@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:aop="http://www.springframework.org/schema/aop"
+	xmlns:tx="http://www.springframework.org/schema/tx" xmlns:context="http://www.springframework.org/schema/context"
+	xsi:schemaLocation="
+        http://www.springframework.org/schema/beans 
+        http://www.springframework.org/schema/beans/spring-beans-3.0.xsd
+        http://www.springframework.org/schema/tx 
+        http://www.springframework.org/schema/tx/spring-tx-3.0.xsd
+        http://www.springframework.org/schema/aop 
+        http://www.springframework.org/schema/aop/spring-aop-3.0.xsd
+        http://www.springframework.org/schema/context
+        http://www.springframework.org/schema/context/spring-context-3.0.xsd">
+
+	<!-- Hibernate 主从数据库配置 -->
+	<context:annotation-config />
+
+	<!-- 加载配置文件 -->
+	<bean id="propertyConfigurer" class="org.springframework.beans.factory.config.PropertyPlaceholderConfigurer">
+		<property name="location" value="classpath:jdbc.properties" />
+	</bean>
+
+	<!-- c3p0配置 -->
+	<bean id="parentDataSource" class="com.mchange.v2.c3p0.ComboPooledDataSource">
+		<!-- 驱动类 -->
+		<property name="driverClass" value="${jdbc.driverClass}" /> 
+		<property name="minPoolSize" value="${jdbc.minPoolSize}" /> 
+		<!-- 最小连接数 -->
+		<property name="maxPoolSize" value="${jdbc.maxPoolSize}" /> 
+		<!-- 最大连接数 -->
+		<property name="initialPoolSize" value="${jdbc.initialPoolSize}" />   
+		<!-- 初始连接数 -->
+		<property name="maxIdleTime" value="${jdbc.maxIdleTime}" />       
+		<!-- 空闲丢弃时间 -->
+		<property name="acquireIncrement" value="${jdbc.acquireIncrement}" /> 
+		<!-- 耗尽再创建的连接数 -->
+		<property name="maxStatements" value="${jdbc.maxStatements}" /> 
+		<!-- 最大Statemenet数 -->
+		<property name="idleConnectionTestPeriod" value="${jdbc.idleConnectionTestPeriod}" /> 
+		<!-- 间隔检查空闲连接秒数 -->
+		<property name="acquireRetryAttempts" value="${jdbc.acquireRetryAttempts}" /> 
+		<!-- 获取连接失败继续尝试次数 -->
+		<property name="breakAfterAcquireFailure" value="${jdbc.breakAfterAcquireFailure}" /> 
+		<!-- 获取连接失败数据源是否关闭 -->
+		<property name="testConnectionOnCheckout" value="${jdbc.testConnectionOnCheckout}" /> <!-- connection提交检验有限性 -->
+	</bean>
+
+	<!-- 配置主数据源 -->
+	<bean id="masterDataSource" parent="parentDataSource" destroy-method="close">
+		<!-- 连接字符串 -->
+		<property name="jdbcUrl" value="${jdbc.jdbcUrl.master}" /> 
+		<property name="user" value="${jdbc.user.master}" /> 
+		<property name="password" value="${jdbc.password.master}" /> 
+	</bean>
+
+	<!-- 配置从数据源 -->
+	<bean id="slaveDataSource" parent="parentDataSource"
+		destroy-method="close">
+		<property name="jdbcUrl" value="${jdbc.jdbcUrl.slave}" /> 
+		<property name="user" value="${jdbc.user.slave}" /> 
+		<property name="password" value="${jdbc.password.slave}" /> 
+	</bean>
+
+
+	<!-- 配置数据源 -->
+	<bean id="dataSource" class="com.dxm.aop.DynamicDataSource">
+		<property name="targetDataSources">
+			<map key-type="java.lang.String">
+				<entry key="slave" value-ref="slaveDataSource" />
+			</map>
+		</property>
+		<property name="defaultTargetDataSource" ref="masterDataSource" />
+	</bean>
+
+	<!-- 配置sessionFactory -->
+	<bean id="sessionFactory"
+		class="org.springframework.orm.hibernate3.annotation.AnnotationSessionFactoryBean">
+		<property name="dataSource" ref="dataSource"></property>
+		<property name="hibernateProperties">
+			<props>
+				<prop key="hibernate.dialect">org.hibernate.dialect.MySQL5InnoDBDialect</prop>
+				<prop key="hibernate.show_sql">false</prop>
+				<prop key="hibernate.format_sql">true</prop>
+				<prop key="hibernate.connection.autocommit">true</prop>
+				<prop key="hibernate.hbm2ddl.auto">update</prop>
+				<prop key="hibernate.generate_statistics">true</prop>
+				<prop key="hibernate.connection.release_mode">auto</prop>
+				<prop key="hibernate.autoReconnect">true</prop>
+				<prop key="hibernate.cache.use_query_cache">true</prop>
+				<prop key="hibernate.cache.provider_class">org.hibernate.cache.EhCacheProvider</prop>
+			</props>
+		</property>
+		<property name="mappingResources">
+			<list>
+				<value>com/dxm/model/Notes.hbm.xml</value>
+			</list>
+		</property>
+	</bean>
+
+	<!-- 切换数据源 -->
+	<bean id="dataSourceAdvice" class="com.dxm.aop.DataSourceAdvice" />
+	<aop:config>
+		<aop:advisor pointcut="execution(* com.dxm.dao..DataImpl.*(..))"
+			advice-ref="dataSourceAdvice" />
+	</aop:config>
+
+	<!-- 配置hibernateTemplate -->
+	<bean id="hibernateTemplate" class="org.springframework.orm.hibernate3.HibernateTemplate">
+		<property name="sessionFactory">
+			<ref local="sessionFactory" />
+		</property>
+	</bean>
+
+	<!-- 定义事务管理器（声明式的事务） -->
+	<bean id="transactionManager"
+		class="org.springframework.orm.hibernate3.HibernateTransactionManager">
+		<property name="sessionFactory" ref="sessionFactory" />
+	</bean>
+
+	<!-- 事务拦截器 -->
+	<bean id="transactionInterceptor"
+		class="org.springframework.transaction.interceptor.TransactionInterceptor">
+		<property name="transactionManager">
+			<ref bean="transactionManager" />
+		</property>
+		<property name="transactionAttributes">
+			<props>
+				<prop key="*">PROPAGATION_REQUIRED</prop>
+			</props>
+		</property>
+	</bean>
+
+	<!-- 自动代理 -->
+	<bean id="autoproxy"
+		class="org.springframework.aop.framework.autoproxy.BeanNameAutoProxyCreator">
+		<property name="beanNames">
+			<list>
+				<value>*Impl</value>
+			</list>
+		</property>
+		<property name="interceptorNames">
+			<list>
+				<value>transactionInterceptor</value>
+			</list>
+		</property>
+	</bean>
+
+</beans>

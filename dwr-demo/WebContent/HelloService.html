@@ -1,0 +1,54 @@
+<html>
+	<head>
+		<title>HelloService.html</title>
+		<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+		<script type='text/javascript' src='dwr/interface/dwr.js'></script>
+		<script type='text/javascript' src='dwr/engine.js'></script>
+		<script type='text/javascript' src='dwr/util.js'></script>
+		<script type="text/javascript">
+    /* function testHello(){
+        dwr.hello('xiaoming',function(data){
+       // DWRUtil.setValue('div1',data);
+          alert(data);
+        });
+     }*/
+     function testHello()
+     {
+     	dwr.hello('xiaoming',show);
+     	
+     }
+     
+     
+     function show(data)
+     {
+     	alert(data);
+     }
+     
+     
+     //获得集合中数据
+        function testList(){
+        dwr.getAll(function(array){
+           //var str;
+           for(var i in array){ 
+		   var bean = array[i]; 
+			alert(bean.name); 
+			alert(bean.age); 
+		} 
+         
+          // DWRUtil.setValue('div1',str);       
+        });
+     }
+     
+  
+  </script>
+	</head>
+	<body>
+		<div id="div1"></div>
+		<br>
+		<input type="button" value="DWR HELLO" onclick="testHello()">
+		<br>
+		<input type="button" value="获取集合" onclick="testList()">
+		<br>
+
+	</body>
+</html>
